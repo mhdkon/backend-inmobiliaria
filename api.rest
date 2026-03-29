@@ -1,0 +1,101 @@
+
+### =========================
+### 🧪 TEST BASE DE DATOS
+### =========================
+GET http://localhost:3000/test-db
+
+
+### =========================
+### 👤 REGISTRAR USUARIO
+### =========================
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Moha",
+  "email": "moha@test.com",
+  "password": "123456"
+}
+
+
+### =========================
+### 🔐 LOGIN
+### =========================
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "moha@test.com",
+  "password": "123456"
+}
+
+
+### =========================
+### 🔑 VARIABLES (OPCIONAL)
+### =========================
+# Guarda aquí tu token manualmente después del login
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJtb2hhQHRlc3QuY29tIiwiaWF0IjoxNzc0ODEwMTE3LCJleHAiOjE3NzQ4OTY1MTd9.0VfLIEDFioW5YyHgnfmWYYtTccJXh7Jre5cZU87g7e4
+
+
+### =========================
+### 🏠 OBTENER TODAS LAS PROPIEDADES
+### =========================
+GET http://localhost:3000/api/properties
+
+
+### =========================
+### 🔎 FILTRO: PROVINCIA
+### =========================
+GET http://localhost:3000/api/properties?province=Madrid
+
+
+### =========================
+### 🔎 FILTRO: CIUDAD
+### =========================
+GET http://localhost:3000/api/properties?city=Madrid
+
+
+### =========================
+### 🔎 FILTRO: TIPO
+### =========================
+GET http://localhost:3000/api/properties?propertytype=piso
+
+
+### =========================
+### 🏠 CREAR PROPIEDAD
+### =========================
+POST http://localhost:3000/api/properties
+Content-Type: application/json
+Authorization: {{token}}
+
+{
+  "title": "Piso en Madrid",
+  "price": 200000,
+  "province": "Madrid",
+  "city": "Madrid",
+  "bedrooms": 3,
+  "bathrooms": 2,
+  "propertytype": "piso",
+  "occupied": false,
+  "reo": false
+}
+
+
+### =========================
+### ✏️ ACTUALIZAR PROPIEDAD
+### =========================
+PUT http://localhost:3000/api/properties/1
+Content-Type: application/json
+Authorization: {{token}}
+
+{
+  "title": "Piso actualizado",
+  "price": 210000
+}
+
+
+### =========================
+### ❌ ELIMINAR PROPIEDAD
+### =========================
+DELETE http://localhost:3000/api/properties/1
+Authorization: {{token}}
