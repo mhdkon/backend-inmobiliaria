@@ -1,0 +1,25 @@
+
+# Dependencias
+node_modules/
+
+# Variables de entorno
+.env
+
+# Logs
+logs/
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de configuración local
+.env.local
+.env.*.local
+
+# Carpeta de build
+dist/
+build/
+
+# IDE
+.vscode/
