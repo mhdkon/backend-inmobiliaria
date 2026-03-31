@@ -1,9 +1,7 @@
-
 ### =========================
 ### 🧪 TEST BASE DE DATOS
 ### =========================
 GET http://localhost:3000/test-db
-
 
 ### =========================
 ### 👤 REGISTRAR USUARIO
@@ -17,7 +15,6 @@ Content-Type: application/json
   "password": "123456"
 }
 
-
 ### =========================
 ### 🔐 LOGIN
 ### =========================
@@ -29,73 +26,86 @@ Content-Type: application/json
   "password": "123456"
 }
 
-
 ### =========================
 ### 🔑 VARIABLES (OPCIONAL)
 ### =========================
-# Guarda aquí tu token manualmente después del login
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJtb2hhQHRlc3QuY29tIiwiaWF0IjoxNzc0ODEwMTE3LCJleHAiOjE3NzQ4OTY1MTd9.0VfLIEDFioW5YyHgnfmWYYtTccJXh7Jre5cZU87g7e4
-
-
-### =========================
-### 🏠 OBTENER TODAS LAS PROPIEDADES
-### =========================
-GET http://localhost:3000/api/properties
-
+# Después del login, copia el token y pégalo aquí
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJtb2hhQHRlc3QuY29tIiwiaWF0IjoxNzc0OTcyMTg1LCJleHAiOjE3NzUwNTg1ODV9.HJXTVv4-ZPtXDeHkHutzfBEQKBlaJ2xVEcy5PDVm6jI
 
 ### =========================
-### 🔎 FILTRO: PROVINCIA
-### =========================
-GET http://localhost:3000/api/properties?province=Madrid
-
-
-### =========================
-### 🔎 FILTRO: CIUDAD
-### =========================
-GET http://localhost:3000/api/properties?city=Madrid
-
-
-### =========================
-### 🔎 FILTRO: TIPO
-### =========================
-GET http://localhost:3000/api/properties?propertytype=piso
-
-
-### =========================
-### 🏠 CREAR PROPIEDAD
+### 🏠 CREAR PROPIEDAD (con todos los campos necesarios)
 ### =========================
 POST http://localhost:3000/api/properties
 Content-Type: application/json
-Authorization: {{token}}
+Authorization: Bearer {{token}}
 
 {
-  "title": "Piso en Madrid",
+  "title": "Piso en Madrid centro",
+  "description": "Piso luminoso y reformado, cerca de Gran Vía",
   "price": 200000,
   "province": "Madrid",
   "city": "Madrid",
+  "street": "Gran Vía 123",
   "bedrooms": 3,
   "bathrooms": 2,
+  "area": 85,
   "propertytype": "piso",
   "occupied": false,
-  "reo": false
+  "reo": false,
+  "lat": 40.4168,
+  "lng": -3.7038,
+  "images": []
 }
 
+### =========================
+### 📥 OBTENER TODAS LAS PROPIEDADES (para ver el ID generado)
+### =========================
+GET http://localhost:3000/api/properties
 
 ### =========================
-### ✏️ ACTUALIZAR PROPIEDAD
+### ✏️ ACTUALIZAR PROPIEDAD (solo título y precio)
 ### =========================
-PUT http://localhost:3000/api/properties/1
+# Reemplaza el ID por el que te devolvió la creación (ejemplo: 2)
+PUT http://localhost:3000/api/properties/2
 Content-Type: application/json
-Authorization: {{token}}
+Authorization: Bearer {{token}}
 
 {
-  "title": "Piso actualizado",
-  "price": 210000
+  "title": "Piso actualizado - ahora más caro",
+  "price": 215000
 }
 
+### =========================
+### 📥 OBTENER DE NUEVO PARA VERIFICAR CAMBIOS
+### =========================
+GET http://localhost:3000/api/properties
 
 ### =========================
-### ❌ ELIMINAR PROPIEDAD
+### ❤️ AÑADIR A FAVORITOS
 ### =========================
-DELETE http://localhost:3000/api/properties/1
-Authorization: {{token}}
+# Reemplaza el ID por el de la propiedad
+POST http://localhost:3000/api/favorites/7
+Authorization: Bearer {{token}}
+
+### =========================
+### 📋 OBTENER FAVORITOS DEL USUARIO
+### =========================
+GET http://localhost:3000/api/favorites
+Authorization: Bearer {{token}}
+
+### =========================
+### ❌ ELIMINAR PROPIEDAD (opcional)
+### =========================
+DELETE http://localhost:3000/api/properties/2
+Authorization: Bearer {{token}}
+
+### =========================
+### 👥 GESTIÓN DE USUARIOS (solo admin)
+### =========================
+# Nota: Necesitas tener un usuario con rol 'admin' para estas rutas
+GET http://localhost:3000/api/users
+Authorization: Bearer {{token}}
+
+# Eliminar un usuario (reemplaza el ID)
+DELETE http://localhost:3000/api/users/2
+Authorization: Bearer {{token}}
