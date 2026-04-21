@@ -1,111 +1,130 @@
-### =========================
-### 🧪 TEST BASE DE DATOS
-### =========================
-GET http://localhost:3000/test-db
+### Variables
+@baseUrl = http://localhost:3000/api
+@contentType = application/json
+@adminEmail = admin@inmobiliaria.com
+@adminPassword = admin123
+@userEmail = usuario@test.com
+@userPassword = 123456
 
-### =========================
-### 👤 REGISTRAR USUARIO
-### =========================
-POST http://localhost:3000/api/auth/register
-Content-Type: application/json
+### ========================================================
+### 1. AUTH
+### ========================================================
+
+### Registrar un nuevo usuario
+POST {{baseUrl}}/auth/register
+Content-Type: {{contentType}}
 
 {
-  "name": "Moha",
-  "email": "moha@test.com",
+  "name": "Usuario Test",
+  "email": "usuario@test.com",
   "password": "123456"
 }
 
-### =========================
-### 🔐 LOGIN
-### =========================
-POST http://localhost:3000/api/auth/login
-Content-Type: application/json
+### Login (usuario normal)
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
 
 {
-  "email": "moha@test.com",
+  "email": "usuario@test.com",
   "password": "123456"
 }
 
-### =========================
-### 🔑 VARIABLES (OPCIONAL)
-### =========================
-# Después del login, copia el token y pégalo aquí
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJtb2hhQHRlc3QuY29tIiwiaWF0IjoxNzc0OTcyMTg1LCJleHAiOjE3NzUwNTg1ODV9.HJXTVv4-ZPtXDeHkHutzfBEQKBlaJ2xVEcy5PDVm6jI
-
-### =========================
-### 🏠 CREAR PROPIEDAD (con todos los campos necesarios)
-### =========================
-POST http://localhost:3000/api/properties
-Content-Type: application/json
-Authorization: Bearer {{token}}
+### Login (admin)
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
 
 {
-  "title": "Piso en Madrid centro",
-  "description": "Piso luminoso y reformado, cerca de Gran Vía",
-  "price": 200000,
-  "province": "Madrid",
-  "city": "Madrid",
-  "street": "Gran Vía 123",
-  "bedrooms": 3,
+  "email": "admin@inmobiliaria.com",
+  "password": "Admin123!"
+}
+
+### Guardar token (ejecutar después de login)
+@authToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTUsImVtYWlsIjoidXN1YXJpb0B0ZXN0LmNvbSIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzc2MzQ0ODg3LCJleHAiOjE3NzY0MzEyODd9.Qu7AtYLmqpGMxzNF5QB1UX1pEvtVSq6tuiBeWYrkInA
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTQsImVtYWlsIjoiYWRtaW5AaW5tb2JpbGlhcmlhLmNvbSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc3NjM0NDk4MiwiZXhwIjoxNzc2NDMxMzgyfQ.LZQpF7_OTixfZo3yjI8ycI1b9WNSSuNY0m12e4Ry6Z4
+
+### ========================================================
+### 2. USERS (solo admin)
+### ========================================================
+
+### Obtener todos los usuarios (admin)
+GET {{baseUrl}}/users
+Authorization: Bearer {{adminToken}}
+
+### Eliminar un usuario (admin) - cambiar el ID
+DELETE {{baseUrl}}/users/2
+Authorization: Bearer {{adminToken}}
+
+### ========================================================
+### 3. PROPIEDADES
+### ========================================================
+
+### Crear propiedad con imágenes en base64 (simulado, usa strings cortos de ejemplo)
+POST {{baseUrl}}/properties
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
+
+{
+  "title": "Casa en la playa",
+  "description": "Hermosa casa frente al mar",
+  "price": 250000,
+  "province": "Málaga",
+  "city": "Marbella",
+  "street": "Calle del Mar 12",
+  "bedrooms": 4,
   "bathrooms": 2,
-  "area": 85,
-  "propertytype": "piso",
+  "area": 180,
+  "propertytype": "casa",
   "occupied": false,
   "reo": false,
-  "lat": 40.4168,
-  "lng": -3.7038,
-  "images": []
+  "lat": 36.5082,
+  "lng": -4.8833,
+  "images": ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="]
 }
 
-### =========================
-### 📥 OBTENER TODAS LAS PROPIEDADES (para ver el ID generado)
-### =========================
-GET http://localhost:3000/api/properties
+### Crear propiedad con FormData (archivos) - no se puede probar fácilmente en .rest, pero se puede con Postman
+### En .rest no soporta multipart, así que se omite. Para probar multer usa Postman o frontend.
 
-### =========================
-### ✏️ ACTUALIZAR PROPIEDAD (solo título y precio)
-### =========================
-# Reemplaza el ID por el que te devolvió la creación (ejemplo: 2)
-PUT http://localhost:3000/api/properties/2
-Content-Type: application/json
-Authorization: Bearer {{token}}
+### Obtener todas las propiedades (con paginación y filtros)
+GET {{baseUrl}}/properties?page=1&limit=5&province=Málaga
+
+### Obtener propiedad por ID (cambiar el ID por uno real)
+GET {{baseUrl}}/properties/1
+
+### Actualizar propiedad (PUT)
+PUT {{baseUrl}}/properties/1
+Authorization: Bearer {{authToken}}
+Content-Type: {{contentType}}
 
 {
-  "title": "Piso actualizado - ahora más caro",
-  "price": 215000
+  "title": "Casa en la playa (actualizada)",
+  "price": 260000,
+  "bedrooms": 5
 }
 
-### =========================
-### 📥 OBTENER DE NUEVO PARA VERIFICAR CAMBIOS
-### =========================
-GET http://localhost:3000/api/properties
+### Eliminar propiedad (cambiar ID)
+DELETE {{baseUrl}}/properties/1
+Authorization: Bearer {{authToken}}
 
-### =========================
-### ❤️ AÑADIR A FAVORITOS
-### =========================
-# Reemplaza el ID por el de la propiedad
-POST http://localhost:3000/api/favorites/7
-Authorization: Bearer {{token}}
+### ========================================================
+### 4. FAVORITOS
+### ========================================================
 
-### =========================
-### 📋 OBTENER FAVORITOS DEL USUARIO
-### =========================
-GET http://localhost:3000/api/favorites
-Authorization: Bearer {{token}}
+### Añadir propiedad a favoritos (cambiar ID)
+POST {{baseUrl}}/favorites/1
+Authorization: Bearer {{authToken}}
 
-### =========================
-### ❌ ELIMINAR PROPIEDAD (opcional)
-### =========================
-DELETE http://localhost:3000/api/properties/2
-Authorization: Bearer {{token}}
+### Obtener favoritos del usuario
+GET {{baseUrl}}/favorites
+Authorization: Bearer {{authToken}}
 
-### =========================
-### 👥 GESTIÓN DE USUARIOS (solo admin)
-### =========================
-# Nota: Necesitas tener un usuario con rol 'admin' para estas rutas
-GET http://localhost:3000/api/users
-Authorization: Bearer {{token}}
+### Eliminar de favoritos (cambiar ID)
+DELETE {{baseUrl}}/favorites/1
+Authorization: Bearer {{authToken}}
 
-# Eliminar un usuario (reemplaza el ID)
-DELETE http://localhost:3000/api/users/2
-Authorization: Bearer {{token}}
+### ========================================================
+### 5. SUBIR IMÁGENES (endpoint específico)
+### ========================================================
+### Este endpoint requiere multipart/form-data, no se puede probar en .rest
+### Usa Postman o frontend.
