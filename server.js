@@ -57,10 +57,25 @@ app.use((req, res, next) => {
 });
 
 // ========================================================
-// 🔧 CORS
+// 🔧 CORS - PERMITIR MÚLTIPLES ORÍGENES
 // ========================================================
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,        // Tu dominio de Netlify (si está definido)
+].filter(Boolean);                 // Elimina valores undefined
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: function (origin, callback) {
+    // Permitir solicitudes sin origen (como Postman, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.warn(`❌ Origen bloqueado por CORS: ${origin}`);
+      return callback(new Error('No permitido por CORS'), false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -82,7 +97,7 @@ pool.connect()
   .catch(err => console.error("❌ Error conectando a DB:", err.message));
 
 // ========================================================
-// 🔨 CREAR TABLAS AUTOMÁTICAMENTE (OPCIÓN 3)
+// 🔨 CREAR TABLAS AUTOMÁTICAMENTE
 // ========================================================
 const initDB = async () => {
   try {
@@ -140,7 +155,6 @@ const initDB = async () => {
   }
 };
 
-// Ejecutar la creación de tablas antes de iniciar el servidor
 initDB();
 
 // ========================================================
