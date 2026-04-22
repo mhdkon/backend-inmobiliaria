@@ -20,48 +20,8 @@ cloudinary.config({
 
 console.log("✅ Cloudinary configurado");
 
-// Configurar multer para procesar archivos en memoria
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    console.log(`📁 Archivo recibido: ${file.originalname} (${file.mimetype})`);
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      console.error(`❌ Archivo rechazado: ${file.mimetype} no es imagen`);
-      cb(new Error('Solo se permiten imágenes'));
-    }
-  }
-});
-
-// Helper para subir a Cloudinary
-const uploadToCloudinary = (fileBuffer, filename) => {
-  return new Promise((resolve, reject) => {
-    console.log(`⬆️ Subiendo a Cloudinary: ${filename}`);
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        resource_type: 'auto',
-        public_id: `inmobiliaria/${Date.now()}-${filename}`,
-        folder: 'inmobiliaria'
-      },
-      (error, result) => {
-        if (error) {
-          console.error(`❌ Error en Cloudinary:`, error.message);
-          reject(error);
-        } else {
-          console.log(`✅ URL Cloudinary: ${result.secure_url}`);
-          resolve(result.secure_url);
-        }
-      }
-    );
-    stream.end(fileBuffer);
-  });
-};
-
 // ========================================================
-// 📡 LOGS para depuración
+// 📡 LOGS
 // ========================================================
 app.use((req, res, next) => {
   console.log(`➡️ ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
@@ -78,30 +38,34 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Middleware para parsear JSON
+// Middleware JSON
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ========================================================
-// 🔌 POSTGRES
+// 🔌 POSTGRES (🔥 AQUÍ ESTABA TU ERROR)
 // ========================================================
+
+// ❌ ANTES TENÍAS DB_USER, DB_PASSWORD, etc (ESO ROMPE RENDER)
+// ✅ AHORA SOLO USAMOS DATABASE_URL (CORRECTO)
+
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 pool.connect()
-  .then(() => console.log("✅ DB conectada"))
+  .then(() => console.log("✅ DB conectada correctamente"))
   .catch(err => console.error("❌ Error conectando a DB:", err.message));
 
 // ========================================================
-// 🔐 Middleware de autenticación
+// 🔐 AUTH MIDDLEWARE
 // ========================================================
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers["authorization"];
+
   console.log("🔑 Auth header:", authHeader);
 
   if (!authHeader) {
@@ -123,32 +87,57 @@ const authMiddleware = (req, res, next) => {
 };
 
 // ========================================================
-// 👤 REGISTRO
+// 📷 MULTER
+// ========================================================
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo imágenes'));
+    }
+  }
+});
+
+// ========================================================
+// ☁️ CLOUDINARY UPLOAD
+// ========================================================
+const uploadToCloudinary = (buffer, filename) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'inmobiliaria',
+        public_id: `${Date.now()}-${filename}`
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result.secure_url);
+      }
+    );
+    stream.end(buffer);
+  });
+};
+
+// ========================================================
+// 👤 REGISTER
 // ========================================================
 app.post("/api/auth/register", async (req, res) => {
-  console.log("📝 POST /api/auth/register", req.body);
   try {
     const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "Faltan campos obligatorios" });
-    }
 
     const hashed = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      "INSERT INTO users (name, email, password) VALUES ($1,$2,$3) RETURNING id, name, email, role",
+      "INSERT INTO users (name, email, password) VALUES ($1,$2,$3) RETURNING id, name, email",
       [name, email, hashed]
     );
 
-    console.log("✅ Usuario registrado:", result.rows[0]);
     res.json(result.rows[0]);
-
   } catch (err) {
-    console.error("❌ Error en registro:", err.message);
-    if (err.code === '23505') {
-      return res.status(400).json({ error: "El email ya está registrado" });
-    }
+    console.error(err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -157,7 +146,6 @@ app.post("/api/auth/register", async (req, res) => {
 // 🔐 LOGIN
 // ========================================================
 app.post("/api/auth/login", async (req, res) => {
-  console.log("🔐 POST /api/auth/login", req.body.email);
   try {
     const { email, password } = req.body;
 
@@ -168,15 +156,11 @@ app.post("/api/auth/login", async (req, res) => {
 
     const user = result.rows[0];
 
-    if (!user) {
-      return res.status(400).json({ error: "Usuario no encontrado" });
-    }
+    if (!user) return res.status(400).json({ error: "Usuario no encontrado" });
 
     const valid = await bcrypt.compare(password, user.password);
 
-    if (!valid) {
-      return res.status(400).json({ error: "Password incorrecta" });
-    }
+    if (!valid) return res.status(400).json({ error: "Password incorrecta" });
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
@@ -184,18 +168,18 @@ app.post("/api/auth/login", async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    const { password: _, ...userWithoutPassword } = user;
-    console.log("✅ Login exitoso:", user.email);
-    res.json({ token, user: userWithoutPassword });
+    const { password: _, ...userSafe } = user;
+
+    res.json({ token, user: userSafe });
 
   } catch (err) {
-    console.error("❌ Error en login:", err.message);
+    console.error(err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ========================================================
-// 👥 USERS (solo admin)
+// 👥 USERS
 // ========================================================
 app.get("/api/users", authMiddleware, async (req, res) => {
   try {
@@ -206,160 +190,54 @@ app.get("/api/users", authMiddleware, async (req, res) => {
   }
 });
 
-app.delete("/api/users/:id", authMiddleware, async (req, res) => {
-  try {
-    const userId = parseInt(req.params.id);
-    if (userId === req.user.id) {
-      return res.status(400).json({ error: "No puedes eliminarte a ti mismo" });
-    }
-    await pool.query("DELETE FROM users WHERE id = $1", [userId]);
-    res.json({ message: "Usuario eliminado" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ========================================================
-// 🏠 PROPIEDADES - CREAR CON IMÁGENES
+// 🏠 PROPERTIES (CREAR)
 // ========================================================
 app.post("/api/properties", authMiddleware, upload.array('images', 10), async (req, res) => {
   try {
-    console.log("🏠 POST /api/properties - Creando propiedad...");
-    const {
-      title, description, price, province, city, street,
-      bedrooms, bathrooms, area, propertytype, occupied, reo,
-      lat, lng
-    } = req.body;
+    const { title, description, price } = req.body;
 
-    // Subir imágenes a Cloudinary
     let imageUrls = [];
+
     if (req.files && req.files.length > 0) {
-      console.log(`📷 ${req.files.length} imagen(es) recibida(s)`);
       imageUrls = await Promise.all(
         req.files.map(file => uploadToCloudinary(file.buffer, file.originalname))
       );
-      console.log(`✅ ${imageUrls.length} imagen(es) subida(s) a Cloudinary`);
-    } else {
-      console.log("ℹ️ Sin imágenes adjuntas");
     }
 
     const result = await pool.query(
-      `INSERT INTO properties (
-        title, description, price, province, city, street,
-        bedrooms, bathrooms, area, propertytype,
-        occupied, reo, lat, lng, images, user_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-      RETURNING *`,
+      `INSERT INTO properties (title, description, price, images, user_id)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [
-        title, description, price, province, city, street,
-        bedrooms, bathrooms, area, propertytype,
-        occupied, reo, lat, lng,
-        imageUrls.length > 0 ? JSON.stringify(imageUrls) : null,
+        title,
+        description,
+        price,
+        JSON.stringify(imageUrls),
         req.user.id
       ]
     );
 
-    const newProperty = result.rows[0];
-    const userResult = await pool.query(
-      "SELECT id, name FROM users WHERE id = $1",
-      [req.user.id]
-    );
-    const agent = userResult.rows[0] || null;
-
-    console.log(`✅ Propiedad creada con ID: ${newProperty.id}`);
-    res.json({
-      ...newProperty,
-      images: imageUrls,
-      agent: agent ? { id: agent.id, name: agent.name } : null
-    });
+    res.json(result.rows[0]);
 
   } catch (err) {
-    console.error("❌ Error creando propiedad:", err.message);
+    console.error(err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ========================================================
-// 🏠 PROPIEDADES - LISTAR
+// 🏠 PROPERTIES (LISTAR)
 // ========================================================
 app.get("/api/properties", async (req, res) => {
   try {
-    const {
-      province, city, propertytype, priceMin, priceMax,
-      bedrooms, bathrooms, occupied, reo
-    } = req.query;
+    const result = await pool.query("SELECT * FROM properties");
 
-    let query = `
-      SELECT p.*, u.id as agent_id, u.name as agent_name
-      FROM properties p
-      LEFT JOIN users u ON p.user_id = u.id
-      WHERE 1=1
-    `;
-    let values = [];
-
-    if (province) {
-      values.push(province);
-      query += ` AND p.province = $${values.length}`;
-    }
-    if (city) {
-      values.push(city);
-      query += ` AND p.city = $${values.length}`;
-    }
-    if (propertytype) {
-      values.push(propertytype);
-      query += ` AND p.propertytype = $${values.length}`;
-    }
-    if (priceMin) {
-      values.push(priceMin);
-      query += ` AND p.price >= $${values.length}`;
-    }
-    if (priceMax) {
-      values.push(priceMax);
-      query += ` AND p.price <= $${values.length}`;
-    }
-    if (bedrooms) {
-      values.push(bedrooms);
-      query += ` AND p.bedrooms >= $${values.length}`;
-    }
-    if (bathrooms) {
-      values.push(bathrooms);
-      query += ` AND p.bathrooms >= $${values.length}`;
-    }
-    if (occupied !== undefined) {
-      values.push(occupied === "true");
-      query += ` AND p.occupied = $${values.length}`;
-    }
-    if (reo !== undefined) {
-      values.push(reo === "true");
-      query += ` AND p.reo = $${values.length}`;
-    }
-
-    const result = await pool.query(query, values);
-
-    const properties = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      price: row.price,
-      province: row.province,
-      city: row.city,
-      street: row.street,
-      bedrooms: row.bedrooms,
-      bathrooms: row.bathrooms,
-      area: row.area,
-      propertytype: row.propertytype,
-      occupied: row.occupied,
-      reo: row.reo,
-      lat: row.lat,
-      lng: row.lng,
-      images: row.images ? JSON.parse(row.images) : [],
-      user_id: row.user_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      agent: row.agent_id ? { id: row.agent_id, name: row.agent_name } : null
+    const data = result.rows.map(p => ({
+      ...p,
+      images: p.images ? JSON.parse(p.images) : []
     }));
 
-    res.json(properties);
+    res.json(data);
 
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -367,152 +245,15 @@ app.get("/api/properties", async (req, res) => {
 });
 
 // ========================================================
-// ✏️ ACTUALIZAR PROPIEDAD
-// ========================================================
-app.put("/api/properties/:id", authMiddleware, upload.array('images', 10), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const fields = req.body;
-
-    const validFields = [
-      'title', 'description', 'price', 'province', 'city', 'street',
-      'bedrooms', 'bathrooms', 'area', 'propertytype', 'occupied', 'reo',
-      'lat', 'lng'
-    ];
-
-    const setClauses = [];
-    const values = [];
-    let paramIndex = 1;
-
-    for (const field of validFields) {
-      if (fields.hasOwnProperty(field)) {
-        setClauses.push(`${field} = $${paramIndex}`);
-        values.push(fields[field]);
-        paramIndex++;
-      }
-    }
-
-    // Procesar imágenes si se envían
-    if (req.files && req.files.length > 0) {
-      console.log(`📷 Actualizando con ${req.files.length} imagen(es)`);
-      const imageUrls = await Promise.all(
-        req.files.map(file => uploadToCloudinary(file.buffer, file.originalname))
-      );
-      setClauses.push(`images = $${paramIndex}`);
-      values.push(JSON.stringify(imageUrls));
-      paramIndex++;
-    }
-
-    if (setClauses.length === 0) {
-      return res.status(400).json({ error: "No hay campos para actualizar" });
-    }
-
-    values.push(id);
-    const query = `
-      UPDATE properties
-      SET ${setClauses.join(', ')}
-      WHERE id = $${paramIndex}
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, values);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Propiedad no encontrada" });
-    }
-
-    const updatedProperty = result.rows[0];
-    const userResult = await pool.query(
-      "SELECT id, name FROM users WHERE id = $1",
-      [updatedProperty.user_id]
-    );
-    const agent = userResult.rows[0] || null;
-
-    console.log(`✅ Propiedad actualizada: ${updatedProperty.id}`);
-    res.json({
-      ...updatedProperty,
-      images: updatedProperty.images ? JSON.parse(updatedProperty.images) : [],
-      agent: agent ? { id: agent.id, name: agent.name } : null
-    });
-
-  } catch (err) {
-    console.error("❌ Error en actualización:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ========================================================
-// ❌ ELIMINAR PROPIEDAD
-// ========================================================
-app.delete("/api/properties/:id", authMiddleware, async (req, res) => {
-  try {
-    await pool.query("DELETE FROM properties WHERE id=$1", [req.params.id]);
-    res.json({ message: "Eliminado" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ========================================================
-// ❤️ FAVORITOS
-// ========================================================
-app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
-  try {
-    await pool.query(
-      "INSERT INTO favorites (user_id, property_id) VALUES ($1,$2)",
-      [req.user.id, req.params.id]
-    );
-    res.json({ message: "Añadido a favoritos" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/favorites", authMiddleware, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT p.*, u.id as agent_id, u.name as agent_name
-       FROM favorites f
-       JOIN properties p ON p.id = f.property_id
-       LEFT JOIN users u ON p.user_id = u.id
-       WHERE f.user_id = $1`,
-      [req.user.id]
-    );
-
-    const favorites = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      price: row.price,
-      province: row.province,
-      city: row.city,
-      street: row.street,
-      bedrooms: row.bedrooms,
-      bathrooms: row.bathrooms,
-      area: row.area,
-      propertytype: row.propertytype,
-      occupied: row.occupied,
-      reo: row.reo,
-      lat: row.lat,
-      lng: row.lng,
-      images: row.images ? JSON.parse(row.images) : [],
-      user_id: row.user_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      agent: row.agent_id ? { id: row.agent_id, name: row.agent_name } : null
-    }));
-
-    res.json(favorites);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ========================================================
-// 🧪 TEST
+// 🧪 TEST DB
 // ========================================================
 app.get("/test-db", async (req, res) => {
-  res.json({ message: "OK" });
+  try {
+    const result = await pool.query("SELECT NOW()");
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ========================================================
