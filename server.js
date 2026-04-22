@@ -57,25 +57,10 @@ app.use((req, res, next) => {
 });
 
 // ========================================================
-// 🔧 CORS - PERMITIR MÚLTIPLES ORÍGENES
+// 🔧 CORS - PERMITIR TODOS LOS ORÍGENES (SOLO PRUEBAS)
 // ========================================================
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  process.env.FRONTEND_URL,        // Tu dominio de Netlify (si está definido)
-].filter(Boolean);                 // Elimina valores undefined
-
 app.use(cors({
-  origin: function (origin, callback) {
-    // Permitir solicitudes sin origen (como Postman, curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      console.warn(`❌ Origen bloqueado por CORS: ${origin}`);
-      return callback(new Error('No permitido por CORS'), false);
-    }
-  },
+  origin: true,               // ← Permite cualquier origen
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -85,7 +70,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ========================================================
-// 🔌 POSTGRES - CONEXIÓN PARA RENDER (usando DATABASE_URL)
+// 🔌 POSTGRES - CONEXIÓN PARA RENDER
 // ========================================================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
