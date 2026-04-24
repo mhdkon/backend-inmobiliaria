@@ -60,7 +60,7 @@ app.use((req, res, next) => {
 // 🔧 CORS - PERMITIR TODOS LOS ORÍGENES (SOLO PRUEBAS)
 // ========================================================
 app.use(cors({
-  origin: true,               // ← Permite cualquier origen
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -446,7 +446,7 @@ app.delete("/api/properties/:id", authMiddleware, async (req, res) => {
 });
 
 // ========================================================
-// ❤️ FAVORITOS
+// ❤️ FAVORITOS - AÑADIR
 // ========================================================
 app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
   try {
@@ -460,6 +460,9 @@ app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// ========================================================
+// ❤️ FAVORITOS - LISTAR
+// ========================================================
 app.get("/api/favorites", authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
@@ -496,6 +499,30 @@ app.get("/api/favorites", authMiddleware, async (req, res) => {
 
     res.json(favorites);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========================================================
+// ❤️ FAVORITOS - ELIMINAR
+// ========================================================
+app.delete("/api/favorites/:id", authMiddleware, async (req, res) => {
+  try {
+    const propertyId = req.params.id;
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      "DELETE FROM favorites WHERE user_id = $1 AND property_id = $2 RETURNING *",
+      [userId, propertyId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Favorito no encontrado" });
+    }
+
+    res.json({ message: "Favorito eliminado correctamente" });
+  } catch (err) {
+    console.error("❌ Error eliminando favorito:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
