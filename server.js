@@ -368,12 +368,14 @@ app.get("/api/properties", async (req, res) => {
 });
 
 // ========================================================
-// ✏️ ACTUALIZAR PROPIEDAD
+// ✏️ ACTUALIZAR PROPIEDAD (CORREGIDO)
 // ========================================================
 app.put("/api/properties/:id", authMiddleware, upload.array('images', 10), async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = req.body;
+    // Convertir req.body a un objeto plano seguro (evita problemas con hasOwnProperty)
+    const fields = { ...req.body };
+
     const validFields = [
       'title', 'description', 'price', 'province', 'city', 'street',
       'bedrooms', 'bathrooms', 'area', 'propertytype', 'occupied', 'reo',
@@ -384,21 +386,37 @@ app.put("/api/properties/:id", authMiddleware, upload.array('images', 10), async
     const values = [];
     let paramIndex = 1;
 
+    // 1. Actualizar campos de texto si existen en la petición
     for (const field of validFields) {
-      if (fields.hasOwnProperty(field)) {
+      if (fields[field] !== undefined) {
         setClauses.push(`${field} = $${paramIndex}`);
         values.push(fields[field]);
         paramIndex++;
       }
     }
 
+    // 2. Manejo de imágenes: fusionar existentes + nuevas
+    let existingImages = [];
+    if (fields.existingImages) {
+      try {
+        existingImages = JSON.parse(fields.existingImages);
+      } catch(e) { existingImages = []; }
+    }
+
+    let newImages = [];
     if (req.files && req.files.length > 0) {
-      const imageUrls = await Promise.all(
+      newImages = await Promise.all(
         req.files.map(file => uploadToCloudinary(file.buffer, file.originalname))
       );
+    }
+
+    const allImages = [...existingImages, ...newImages];
+    if (allImages.length > 0) {
       setClauses.push(`images = $${paramIndex}`);
-      values.push(JSON.stringify(imageUrls));
+      values.push(JSON.stringify(allImages));
       paramIndex++;
+    } else if (fields.existingImages === undefined && !req.files?.length) {
+      // No se envía información de imágenes → no tocar el campo images
     }
 
     if (setClauses.length === 0) {
