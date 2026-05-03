@@ -49,10 +49,10 @@ const uploadToCloudinary = (fileBuffer, filename) => {
 };
 
 // ========================================================
-// 📡 LOGS
+// 📡 LOGS DE PETICIONES (globales)
 // ========================================================
 app.use((req, res, next) => {
-  console.log(`➡️ ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+  console.log(`\n➡️ ${req.method} ${req.url} - Origin: ${req.headers.origin || 'no-origin'}`);
   next();
 });
 
@@ -143,11 +143,14 @@ const initDB = async () => {
 initDB();
 
 // ========================================================
-// 🔐 MIDDLEWARE DE AUTENTICACIÓN
+// 🔐 MIDDLEWARE DE AUTENTICACIÓN (con logs)
 // ========================================================
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers["authorization"];
+  console.log(`🔐 Auth - Header recibido: ${authHeader ? authHeader.substring(0, 30) + '...' : 'NINGUNO'}`);
+  
   if (!authHeader) {
+    console.log("❌ No hay header Authorization");
     return res.status(401).json({ error: "Token requerido" });
   }
   const token = authHeader.startsWith("Bearer ")
@@ -156,8 +159,10 @@ const authMiddleware = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
+    console.log(`✅ Token válido para usuario ID: ${decoded.id}`);
     next();
   } catch (err) {
+    console.log(`❌ Token inválido: ${err.message}`);
     return res.status(401).json({ error: "Token inválido" });
   }
 };
@@ -166,6 +171,7 @@ const authMiddleware = (req, res, next) => {
 // 👤 REGISTRO
 // ========================================================
 app.post("/api/auth/register", async (req, res) => {
+  console.log("📝 Registro - Body:", { ...req.body, password: '***' });
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -176,11 +182,13 @@ app.post("/api/auth/register", async (req, res) => {
       "INSERT INTO users (name, email, password) VALUES ($1,$2,$3) RETURNING id, name, email, role",
       [name, email, hashed]
     );
+    console.log(`✅ Usuario registrado: ${email}`);
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === '23505') {
       return res.status(400).json({ error: "El email ya está registrado" });
     }
+    console.error("❌ Error en registro:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -189,6 +197,7 @@ app.post("/api/auth/register", async (req, res) => {
 // 🔐 LOGIN
 // ========================================================
 app.post("/api/auth/login", async (req, res) => {
+  console.log("🔑 Login - Body:", { ...req.body, password: '***' });
   try {
     const { email, password } = req.body;
     const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
@@ -197,13 +206,15 @@ app.post("/api/auth/login", async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(400).json({ error: "Password incorrecta" });
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
     const { password: _, ...userWithoutPassword } = user;
+    console.log(`✅ Login exitoso: ${email}`);
     res.json({ token, user: userWithoutPassword });
   } catch (err) {
+    console.error("❌ Error en login:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -212,15 +223,18 @@ app.post("/api/auth/login", async (req, res) => {
 // 👥 USERS (solo admin)
 // ========================================================
 app.get("/api/users", authMiddleware, async (req, res) => {
+  console.log("👥 Obteniendo usuarios...");
   try {
     const result = await pool.query("SELECT id, name, email, role FROM users");
     res.json(result.rows);
   } catch (err) {
+    console.error("❌ Error en GET /users:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.delete("/api/users/:id", authMiddleware, async (req, res) => {
+  console.log(`🗑️ Eliminando usuario ID: ${req.params.id}`);
   try {
     const userId = parseInt(req.params.id);
     if (userId === req.user.id) {
@@ -229,6 +243,7 @@ app.delete("/api/users/:id", authMiddleware, async (req, res) => {
     await pool.query("DELETE FROM users WHERE id = $1", [userId]);
     res.json({ message: "Usuario eliminado" });
   } catch (err) {
+    console.error("❌ Error eliminando usuario:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -237,6 +252,8 @@ app.delete("/api/users/:id", authMiddleware, async (req, res) => {
 // 🏠 PROPIEDADES - CREAR
 // ========================================================
 app.post("/api/properties", authMiddleware, upload.array('images', 10), async (req, res) => {
+  console.log("🏠 Creando nueva propiedad - Body fields:", Object.keys(req.body));
+  console.log(`📸 Archivos recibidos: ${req.files ? req.files.length : 0}`);
   try {
     const {
       title, description, price, province, city, street,
@@ -246,9 +263,11 @@ app.post("/api/properties", authMiddleware, upload.array('images', 10), async (r
 
     let imageUrls = [];
     if (req.files && req.files.length > 0) {
+      console.log("📤 Subiendo imágenes a Cloudinary...");
       imageUrls = await Promise.all(
         req.files.map(file => uploadToCloudinary(file.buffer, file.originalname))
       );
+      console.log(`✅ Subidas ${imageUrls.length} imágenes`);
     }
 
     const result = await pool.query(
@@ -271,6 +290,7 @@ app.post("/api/properties", authMiddleware, upload.array('images', 10), async (r
     const userResult = await pool.query("SELECT id, name FROM users WHERE id = $1", [req.user.id]);
     const agent = userResult.rows[0] || null;
 
+    console.log(`✅ Propiedad creada con ID: ${newProperty.id}`);
     res.json({
       ...newProperty,
       images: imageUrls,
@@ -286,6 +306,7 @@ app.post("/api/properties", authMiddleware, upload.array('images', 10), async (r
 // 🏠 PROPIEDADES - LISTAR CON FILTROS
 // ========================================================
 app.get("/api/properties", async (req, res) => {
+  console.log("🏠 Listando propiedades con filtros:", req.query);
   try {
     const {
       province, city, propertytype, priceMin, priceMax,
@@ -361,85 +382,124 @@ app.get("/api/properties", async (req, res) => {
       agent: row.agent_id ? { id: row.agent_id, name: row.agent_name } : null
     }));
 
+    console.log(`📦 Enviando ${properties.length} propiedades`);
     res.json(properties);
   } catch (err) {
+    console.error("❌ Error listando propiedades:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ========================================================
-// ✏️ ACTUALIZAR PROPIEDAD (CORREGIDO)
+// ✏️ ACTUALIZAR PROPIEDAD (CORREGIDO CON LOGS EXTENSIVOS)
 // ========================================================
 app.put("/api/properties/:id", authMiddleware, upload.array('images', 10), async (req, res) => {
+  console.log(`\n✏️ ACTUALIZANDO propiedad ID: ${req.params.id}`);
+  console.log("📝 Body fields recibidos:", Object.keys(req.body));
+  console.log("📸 Archivos recibidos:", req.files ? req.files.length : 0);
+  
   try {
     const { id } = req.params;
-    // Convertir req.body a un objeto plano seguro (evita problemas con hasOwnProperty)
+    
+    // 1. Verificar que la propiedad existe
+    const propExists = await pool.query("SELECT * FROM properties WHERE id = $1", [id]);
+    if (!propExists.rows.length) {
+      console.log(`❌ Propiedad ${id} no encontrada`);
+      return res.status(404).json({ error: "La propiedad no existe" });
+    }
+    const property = propExists.rows[0];
+    
+    // 2. Verificar permisos (solo dueño o admin)
+    const isAdmin = req.user.role === 'admin';
+    if (!isAdmin && property.user_id !== req.user.id) {
+      console.log(`❌ Usuario ${req.user.id} no puede editar propiedad ${id} (dueño: ${property.user_id})`);
+      return res.status(403).json({ error: "No tienes permiso para editar esta propiedad" });
+    }
+    
+    // 3. Preparar campos a actualizar (solo los que vienen en el body)
     const fields = { ...req.body };
-
     const validFields = [
       'title', 'description', 'price', 'province', 'city', 'street',
       'bedrooms', 'bathrooms', 'area', 'propertytype', 'occupied', 'reo',
       'lat', 'lng'
     ];
-
+    
     const setClauses = [];
     const values = [];
     let paramIndex = 1;
-
-    // 1. Actualizar campos de texto si existen en la petición
+    
     for (const field of validFields) {
       if (fields[field] !== undefined) {
         setClauses.push(`${field} = $${paramIndex}`);
         values.push(fields[field]);
         paramIndex++;
+        console.log(`   Campo a actualizar: ${field} = ${fields[field]}`);
       }
     }
-
-    // 2. Manejo de imágenes: fusionar existentes + nuevas
+    
+    // 4. Manejo de imágenes: combinar existentes + nuevas
+    //    Nota: el frontend debe enviar 'existingImages' como string JSON con las URLs viejas que quiere conservar
     let existingImages = [];
     if (fields.existingImages) {
       try {
         existingImages = JSON.parse(fields.existingImages);
-      } catch(e) { existingImages = []; }
+        console.log(`🖼️ Imágenes existentes a conservar: ${existingImages.length}`);
+      } catch(e) {
+        console.warn("❌ Error parseando existingImages:", e.message);
+        existingImages = [];
+      }
+    } else {
+      // Si no se envía existingImages, se asume que se quieren conservar las actuales
+      existingImages = property.images ? JSON.parse(property.images) : [];
+      console.log(`🖼️ No se envió existingImages, conservando las ${existingImages.length} imágenes actuales`);
     }
-
+    
     let newImages = [];
     if (req.files && req.files.length > 0) {
+      console.log(`📤 Subiendo ${req.files.length} imágenes nuevas a Cloudinary...`);
       newImages = await Promise.all(
         req.files.map(file => uploadToCloudinary(file.buffer, file.originalname))
       );
+      console.log(`✅ Subidas ${newImages.length} imágenes nuevas`);
     }
-
+    
     const allImages = [...existingImages, ...newImages];
     if (allImages.length > 0) {
       setClauses.push(`images = $${paramIndex}`);
       values.push(JSON.stringify(allImages));
       paramIndex++;
+      console.log(`🖼️ Total imágenes final: ${allImages.length}`);
     } else if (fields.existingImages === undefined && !req.files?.length) {
-      // No se envía información de imágenes → no tocar el campo images
+      console.log("ℹ️ No se modificará el campo images");
     }
-
+    
     if (setClauses.length === 0) {
+      console.log("⚠️ No hay campos para actualizar");
       return res.status(400).json({ error: "No hay campos para actualizar" });
     }
-
+    
     values.push(id);
     const query = `
       UPDATE properties
-      SET ${setClauses.join(', ')}
+      SET ${setClauses.join(', ')}, updated_at = NOW()
       WHERE id = $${paramIndex}
       RETURNING *
     `;
-
+    
+    console.log("📝 Ejecutando query:", query);
+    console.log("📦 Valores:", values);
+    
     const result = await pool.query(query, values);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Propiedad no encontrada" });
+      console.log(`❌ No se pudo actualizar propiedad ${id}`);
+      return res.status(404).json({ error: "Propiedad no encontrada después de actualizar" });
     }
-
+    
     const updatedProperty = result.rows[0];
     const userResult = await pool.query("SELECT id, name FROM users WHERE id = $1", [updatedProperty.user_id]);
     const agent = userResult.rows[0] || null;
-
+    
+    console.log(`✅ Propiedad ${id} actualizada correctamente`);
     res.json({
       ...updatedProperty,
       images: updatedProperty.images ? JSON.parse(updatedProperty.images) : [],
@@ -447,7 +507,11 @@ app.put("/api/properties/:id", authMiddleware, upload.array('images', 10), async
     });
   } catch (err) {
     console.error("❌ Error en actualización:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error(err.stack);
+    // Asegurar que siempre devolvemos JSON
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
@@ -455,10 +519,12 @@ app.put("/api/properties/:id", authMiddleware, upload.array('images', 10), async
 // ❌ ELIMINAR PROPIEDAD
 // ========================================================
 app.delete("/api/properties/:id", authMiddleware, async (req, res) => {
+  console.log(`🗑️ Eliminando propiedad ID: ${req.params.id}`);
   try {
     await pool.query("DELETE FROM properties WHERE id=$1", [req.params.id]);
     res.json({ message: "Eliminado" });
   } catch (err) {
+    console.error("❌ Error eliminando propiedad:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -467,6 +533,7 @@ app.delete("/api/properties/:id", authMiddleware, async (req, res) => {
 // ❤️ FAVORITOS - AÑADIR
 // ========================================================
 app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
+  console.log(`❤️ Añadiendo favorito propiedad ${req.params.id} para usuario ${req.user.id}`);
   try {
     await pool.query(
       "INSERT INTO favorites (user_id, property_id) VALUES ($1,$2)",
@@ -474,6 +541,7 @@ app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
     );
     res.json({ message: "Añadido a favoritos" });
   } catch (err) {
+    console.error("❌ Error añadiendo favorito:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -482,6 +550,7 @@ app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
 // ❤️ FAVORITOS - LISTAR
 // ========================================================
 app.get("/api/favorites", authMiddleware, async (req, res) => {
+  console.log(`❤️ Listando favoritos de usuario ${req.user.id}`);
   try {
     const result = await pool.query(
       `SELECT p.*, u.id as agent_id, u.name as agent_name
@@ -515,8 +584,10 @@ app.get("/api/favorites", authMiddleware, async (req, res) => {
       agent: row.agent_id ? { id: row.agent_id, name: row.agent_name } : null
     }));
 
+    console.log(`📦 Enviando ${favorites.length} favoritos`);
     res.json(favorites);
   } catch (err) {
+    console.error("❌ Error listando favoritos:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -525,6 +596,7 @@ app.get("/api/favorites", authMiddleware, async (req, res) => {
 // ❤️ FAVORITOS - ELIMINAR
 // ========================================================
 app.delete("/api/favorites/:id", authMiddleware, async (req, res) => {
+  console.log(`💔 Eliminando favorito propiedad ${req.params.id} para usuario ${req.user.id}`);
   try {
     const propertyId = req.params.id;
     const userId = req.user.id;
@@ -535,6 +607,7 @@ app.delete("/api/favorites/:id", authMiddleware, async (req, res) => {
     );
 
     if (result.rowCount === 0) {
+      console.log(`⚠️ Favorito no encontrado`);
       return res.status(404).json({ error: "Favorito no encontrado" });
     }
 
@@ -549,7 +622,18 @@ app.delete("/api/favorites/:id", authMiddleware, async (req, res) => {
 // 🧪 TEST
 // ========================================================
 app.get("/test-db", async (req, res) => {
+  console.log("🧪 Test endpoint llamado");
   res.json({ message: "OK" });
+});
+
+// ========================================================
+// 🌍 MIDDLEWARE GLOBAL DE MANEJO DE ERRORES (asegura JSON)
+// ========================================================
+app.use((err, req, res, next) => {
+  console.error("🔥 ERROR GLOBAL NO CAPTURADO:", err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Error interno del servidor", details: err.message });
+  }
 });
 
 // ========================================================
