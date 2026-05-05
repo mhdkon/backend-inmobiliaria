@@ -9,43 +9,34 @@ const multer = require('multer');
 
 const app = express();
 
-// ========================================================
-// 📷 CONFIGURAR CLOUDINARY
-// ========================================================
+// Configurar Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ========================================================
-// 🗃️ CONFIGURACIÓN DE MULTER - SOPORTE PARA IMÁGENES GRANDES
-// ========================================================
-// Tamaño máximo por archivo: 50 MB (ajústalo según necesites)
+// Configuracion de Multer
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { 
-    fileSize: MAX_FILE_SIZE          // Límite por archivo
-  },
+  limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (req, file, cb) => {
-    // Aceptar solo imágenes, pero puedes ampliar a otros tipos si quieres
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Solo se permiten archivos de imagen (JPEG, PNG, etc.)'), false);
+      cb(new Error('Solo se permiten archivos de imagen'), false);
     }
   }
 });
 
-// Función para subir a Cloudinary (buffer)
 const uploadToCloudinary = (fileBuffer, filename) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        resource_type: 'auto',        // Cloudinary lo detecta automáticamente
+        resource_type: 'auto',
         public_id: `inmobiliaria/${Date.now()}-${filename}`,
         folder: 'inmobiliaria'
       },
@@ -58,17 +49,13 @@ const uploadToCloudinary = (fileBuffer, filename) => {
   });
 };
 
-// ========================================================
-// 📡 LOGS GLOBALES
-// ========================================================
+// Logs globales
 app.use((req, res, next) => {
-  console.log(`\n➡️ ${req.method} ${req.url} - Origin: ${req.headers.origin || 'no-origin'}`);
+  console.log(`\n${req.method} ${req.url} - Origin: ${req.headers.origin || 'no-origin'}`);
   next();
 });
 
-// ========================================================
-// 🔧 CORS
-// ========================================================
+// CORS
 app.use(cors({
   origin: true,
   credentials: true,
@@ -76,27 +63,21 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ========================================================
-// 📦 BODY PARSER CON LÍMITES ALTOS
-// ========================================================
+// Body parser con limites altos
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ========================================================
-// 🔌 POSTGRES - CONEXIÓN
-// ========================================================
+// PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
 pool.connect()
-  .then(() => console.log("✅ DB conectada correctamente"))
-  .catch(err => console.error("❌ Error conectando a DB:", err.message));
+  .then(() => console.log("DB conectada correctamente"))
+  .catch(err => console.error("Error conectando a DB:", err.message));
 
-// ========================================================
-// 🔨 CREAR TABLAS
-// ========================================================
+// Crear tablas
 const initDB = async () => {
   try {
     await pool.query(`
@@ -109,7 +90,7 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    console.log("✅ Tabla 'users' verificada/creada");
+    console.log("Tabla 'users' verificada/creada");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS properties (
@@ -134,7 +115,7 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    console.log("✅ Tabla 'properties' verificada/creada");
+    console.log("Tabla 'properties' verificada/creada");
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS favorites (
@@ -145,19 +126,17 @@ const initDB = async () => {
         UNIQUE(user_id, property_id)
       )
     `);
-    console.log("✅ Tabla 'favorites' verificada/creada");
+    console.log("Tabla 'favorites' verificada/creada");
 
-    console.log("🎉 Todas las tablas están listas");
+    console.log("Todas las tablas estan listas");
   } catch (err) {
-    console.error("❌ Error creando tablas:", err.message);
+    console.error("Error creando tablas:", err.message);
   }
 };
 
 initDB();
 
-// ========================================================
-// 🔐 MIDDLEWARE DE AUTENTICACIÓN
-// ========================================================
+// Middleware de autenticacion
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   if (!authHeader) {
@@ -171,13 +150,11 @@ const authMiddleware = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
-    return res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Token invalido" });
   }
 };
 
-// ========================================================
-// 👤 REGISTRO
-// ========================================================
+// Registro
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -198,9 +175,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-// ========================================================
-// 🔐 LOGIN
-// ========================================================
+// Login
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -221,9 +196,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// ========================================================
-// 👥 USERS (admin)
-// ========================================================
+// Users (admin)
 app.get("/api/users", authMiddleware, async (req, res) => {
   try {
     const result = await pool.query("SELECT id, name, email, role FROM users");
@@ -246,16 +219,13 @@ app.delete("/api/users/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ========================================================
-// 🏠 PROPIEDADES - CREAR (con manejo de errores de multer)
-// ========================================================
+// Propiedades - Crear
 app.post("/api/properties", authMiddleware, (req, res) => {
   upload.array('images', 10)(req, res, async (err) => {
-    // Manejar errores de multer (incluyendo archivo demasiado grande)
     if (err) {
-      console.error("❌ Multer error en CREATE:", err);
+      console.error("Multer error en CREATE:", err);
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: `El archivo excede el tamaño máximo de ${MAX_FILE_SIZE / (1024*1024)} MB` });
+        return res.status(400).json({ error: `El archivo excede el tamaño maximo de ${MAX_FILE_SIZE / (1024*1024)} MB` });
       }
       return res.status(400).json({ error: err.message });
     }
@@ -300,15 +270,13 @@ app.post("/api/properties", authMiddleware, (req, res) => {
         agent: agent ? { id: agent.id, name: agent.name } : null
       });
     } catch (err) {
-      console.error("❌ Error creando propiedad:", err.message);
+      console.error("Error creando propiedad:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
 });
 
-// ========================================================
-// 🏠 PROPIEDADES - LISTAR
-// ========================================================
+// Propiedades - Listar
 app.get("/api/properties", async (req, res) => {
   try {
     const {
@@ -387,21 +355,18 @@ app.get("/api/properties", async (req, res) => {
 
     res.json(properties);
   } catch (err) {
-    console.error("❌ Error listando propiedades:", err.message);
+    console.error("Error listando propiedades:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ========================================================
-// ✏️ ACTUALIZAR PROPIEDAD (con manejo de errores de multer y límites grandes)
-// ========================================================
+// Actualizar propiedad
 app.put("/api/properties/:id", authMiddleware, (req, res) => {
   upload.array('images', 10)(req, res, async (err) => {
-    // Manejo específico de errores de multer
     if (err) {
-      console.error("❌ Multer error en UPDATE:", err);
+      console.error("Multer error en UPDATE:", err);
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: `El archivo es demasiado grande. Tamaño máximo: ${MAX_FILE_SIZE / (1024*1024)} MB` });
+        return res.status(400).json({ error: `El archivo es demasiado grande. Tamaño maximo: ${MAX_FILE_SIZE / (1024*1024)} MB` });
       }
       if (err.message === 'Solo se permiten archivos de imagen (JPEG, PNG, etc.)') {
         return res.status(400).json({ error: err.message });
@@ -412,20 +377,17 @@ app.put("/api/properties/:id", authMiddleware, (req, res) => {
     try {
       const { id } = req.params;
       
-      // Verificar existencia
       const propExists = await pool.query("SELECT * FROM properties WHERE id = $1", [id]);
       if (propExists.rows.length === 0) {
         return res.status(404).json({ error: "La propiedad no existe" });
       }
       const property = propExists.rows[0];
 
-      // Verificar permisos
       const isAdmin = req.user.role === 'admin';
       if (!isAdmin && property.user_id !== req.user.id) {
         return res.status(403).json({ error: "No tienes permiso para editar esta propiedad" });
       }
 
-      // Recoger campos del body
       const fields = { ...req.body };
       const validFields = [
         'title', 'description', 'price', 'province', 'city', 'street',
@@ -445,7 +407,6 @@ app.put("/api/properties/:id", authMiddleware, (req, res) => {
         }
       }
 
-      // Manejo de imágenes
       let existingImages = [];
       if (fields.existingImages) {
         try {
@@ -496,15 +457,13 @@ app.put("/api/properties/:id", authMiddleware, (req, res) => {
         agent: agent ? { id: agent.id, name: agent.name } : null
       });
     } catch (err) {
-      console.error("❌ Error en actualización:", err.message);
+      console.error("Error en actualizacion:", err.message);
       res.status(500).json({ error: err.message });
     }
   });
 });
 
-// ========================================================
-// ❌ ELIMINAR PROPIEDAD
-// ========================================================
+// Eliminar propiedad completa
 app.delete("/api/properties/:id", authMiddleware, async (req, res) => {
   try {
     await pool.query("DELETE FROM properties WHERE id=$1", [req.params.id]);
@@ -515,15 +474,58 @@ app.delete("/api/properties/:id", authMiddleware, async (req, res) => {
 });
 
 // ========================================================
-// ❤️ FAVORITOS - CRUD
+// NUEVO ENDPOINT: Eliminar una imagen de una propiedad
 // ========================================================
+app.delete("/api/properties/:id/images", authMiddleware, async (req, res) => {
+  try {
+    const propertyId = req.params.id;
+    const { imageUrl } = req.body;  // Se espera la URL de la imagen a eliminar
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: "Se requiere imageUrl en el body" });
+    }
+
+    // Obtener la propiedad
+    const result = await pool.query("SELECT images, user_id FROM properties WHERE id = $1", [propertyId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Propiedad no encontrada" });
+    }
+    const property = result.rows[0];
+
+    // Verificar permisos (admin o dueno de la propiedad)
+    const isAdmin = req.user.role === 'admin';
+    if (!isAdmin && property.user_id !== req.user.id) {
+      return res.status(403).json({ error: "No tienes permiso para modificar esta propiedad" });
+    }
+
+    let images = property.images ? JSON.parse(property.images) : [];
+    const newImages = images.filter(url => url !== imageUrl);
+
+    if (images.length === newImages.length) {
+      return res.status(404).json({ error: "La imagen no existe en esta propiedad" });
+    }
+
+    // Actualizar la propiedad con el nuevo array de imagenes
+    await pool.query(
+      "UPDATE properties SET images = $1, updated_at = NOW() WHERE id = $2",
+      [JSON.stringify(newImages), propertyId]
+    );
+
+    res.json({ message: "Imagen eliminada correctamente", images: newImages });
+  } catch (err) {
+    console.error("Error eliminando imagen:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Favoritos
 app.post("/api/favorites/:id", authMiddleware, async (req, res) => {
   try {
     await pool.query(
       "INSERT INTO favorites (user_id, property_id) VALUES ($1,$2)",
       [req.user.id, req.params.id]
     );
-    res.json({ message: "Añadido a favoritos" });
+    res.json({ message: "Anadido a favoritos" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -586,27 +588,21 @@ app.delete("/api/favorites/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ========================================================
-// 🧪 TEST
-// ========================================================
+// Test
 app.get("/test-db", async (req, res) => {
   res.json({ message: "OK" });
 });
 
-// ========================================================
-// 🌍 MIDDLEWARE GLOBAL DE ERRORES
-// ========================================================
+// Middleware global de errores
 app.use((err, req, res, next) => {
-  console.error("🔥 Error global no capturado:", err);
+  console.error("Error global no capturado:", err);
   if (!res.headersSent) {
     res.status(500).json({ error: "Error interno del servidor", details: err.message });
   }
 });
 
-// ========================================================
-// 🚀 SERVER
-// ========================================================
+// Servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor en http://localhost:${PORT}`);
+  console.log(`Servidor en http://localhost:${PORT}`);
 });
